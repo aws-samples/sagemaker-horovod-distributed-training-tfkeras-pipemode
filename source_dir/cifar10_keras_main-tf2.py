@@ -130,8 +130,8 @@ def _input(epochs, batch_size, channel, channel_name, hvd=None):
     
     # If Horovod, assign channel name using the horovod rank
     if hvd != None:
-        channel_name = '{}_{}'.format(channel_name, hvd.rank())
-    
+        channel_name = '{}_{}'.format(channel_name, hvd.local_rank())
+        
     channel_input_dir = args.training_env['channel_input_dirs'][channel_name]
     
     mode = args.data_config[channel_name]['TrainingInputMode']
