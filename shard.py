@@ -4,21 +4,25 @@ import os
 import sys
 import shutil
 import argparse
-
-def split_tfrecord(data_dir, tfrecord_path, split_size):
+                
+def split_tfrecord(data_dir, tfrecord_path, split_size, num_of_instances):
     with tf.Graph().as_default(), tf.Session() as sess:
         ds = tf.data.TFRecordDataset(tfrecord_path).batch(split_size)
         batch = ds.make_one_shot_iterator().get_next()
 
         part_num = 0
+                    
         while True:
             try:
                 records = sess.run(batch)
-                #part_path = tfrecord_path + '.{:03d}'.format(part_num)
+                
+                shard_bucket_index = int(part_num/num_of_instances)
+                
+                shard_dir = os.path.join(data_dir, f'train/{shard_bucket_index}')
+                if not os.path.exists(shard_dir):
+                    os.makedirs(shard_dir)
 
-                if not os.path.exists(data_dir+f"/train/{part_num}"):
-                    os.makedirs(data_dir+f"/train/{part_num}")
-                output_file = os.path.join(data_dir, f"train/{part_num}/train_{part_num}.tfrecords")                
+                output_file = os.path.join(shard_dir, f'train_{part_num}.tfrecords')
                 print('Generating %s' % output_file)
                 
                 with tf.io.TFRecordWriter(output_file) as writer:
@@ -27,19 +31,20 @@ def split_tfrecord(data_dir, tfrecord_path, split_size):
                 part_num += 1
             except tf.errors.OutOfRangeError: break
 
-def do_shard(data_dir, num_shards):
+
+def do_shard(data_dir, gpus_per_host, num_of_instances):
     tf.compat.v1.enable_eager_execution()
     
     input_file = os.path.join(data_dir, "train/train.tfrecords")
     raw_dataset = tf.data.TFRecordDataset(input_file)
     num_total_records = sum(1 for _ in raw_dataset)
     
-    if num_total_records % num_shards != 0:
-        print('Error: Number of total tfrecords ({}) are not a multiple of number of shards ({})!' % (num_total_records, num_shards))
+    if num_total_records % (num_of_instances * gpus_per_host) != 0:
+        print('Error: Number of total tfrecords ({}) are not a multiple of number of shards ({})!' % (num_total_records, gpus_per_host))
         sys.exit(-1)
     else:
-        size = num_total_records // num_shards
-        split_tfrecord(data_dir, input_file, size)
+        size = num_total_records // ( num_of_instances * gpus_per_host)
+        split_tfrecord(data_dir, input_file, size, num_of_instances)
         
 if __name__ == '__main__':        
     parser = argparse.ArgumentParser()
@@ -49,10 +54,15 @@ if __name__ == '__main__':
         default='',
         help='Directory to download and extract CIFAR-10 to.')
     parser.add_argument(
-        '--num-shards',
+        '--gpus-per-host',
         type=int,
         default=1,
-        help='Number of shards for Horovod.')
+        help='Number of GPUs of an instance for Horovod.')
+    parser.add_argument(
+        '--num-of0instances',
+        type=int,
+        default=1,
+        help='Number of instances for Horovod.')
 
     args = parser.parse_args()
-    do_shard(args.data_dir, args.num_shards)
+    do_shard(args.data_dir, args.gpus_per_host, args.num_of_instances)

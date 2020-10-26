@@ -130,7 +130,7 @@ def _input(epochs, batch_size, channel, channel_name, hvd=None):
     
     # If Horovod, assign channel name using the horovod rank
     if hvd != None:
-        channel_name = '{}_{}'.format(channel_name, hvd.rank())
+        channel_name = '{}_{}'.format(channel_name, hvd.local_rank())
     
     channel_input_dir = args.training_env['channel_input_dirs'][channel_name]
     
@@ -147,6 +147,7 @@ def _input(epochs, batch_size, channel, channel_name, hvd=None):
         dataset = PipeModeDataset(channel=channel_name, record_format='TFRecord')#, benchmark=True)
     else:
         filenames = get_filenames(channel_input_dir)
+        print(f'DEBUG tfrecords : {filenames}')
         dataset = tf.data.TFRecordDataset(filenames)
     
     if 'train' in channel_name:
